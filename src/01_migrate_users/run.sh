@@ -11,7 +11,7 @@ tgtApiKey="x"
 tgtRegion="eu"
 
 # Run
-python3 01_migrate_users.py \
+python3 main.py \
   --srcAccountId $srcAccountId \
   --srcApiKey $srcApiKey \
   --srcRegion $srcRegion \
