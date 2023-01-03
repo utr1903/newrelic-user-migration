@@ -6,26 +6,35 @@ import parse_args
 def run(args):
   headers = {
     "Api-Key": args[parse_args.SOURCE_API_KEY],
-    "Content-Type": 'application/json'
+    "Content-Type": "application/json"
   }
 
-  allUsers = []
+  users = []
   nextCursor = None
 
   while True:
     queryTemplate = Template("""
     {
       actor {
-        users {
-          userSearch(
-            cursor: $nextCursor
-          ) {
-            users {
-              name
-              email
-              userId
+        organization {
+          userManagement {
+            authenticationDomains {
+              authenticationDomains {
+                users(
+                  cursor: $nextCursor
+                ) {
+                  users {
+                    id
+                    name
+                    email
+                    type {
+                      id
+                    }
+                  }
+                }
+              }
+              nextCursor
             }
-            nextCursor
           }
         }
       }
@@ -39,8 +48,8 @@ def run(args):
 
     # Execute request
     request = requests.post(
-      'https://api.eu.newrelic.com/graphql' if args[parse_args.SOURCE_REGION] == "eu" else 'https://api.newrelic.com/graphql',
-      json={'query': query},
+      "https://api.eu.newrelic.com/graphql" if args[parse_args.SOURCE_REGION] == "eu" else "https://api.newrelic.com/graphql",
+      json={"query": query},
       headers=headers
     )
 
@@ -49,15 +58,23 @@ def run(args):
       return
 
     result = request.json()
-    for user in result["data"]["actor"]["users"]["userSearch"]["users"]:
-      allUsers.append(user)
+
+    for domain in result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["authenticationDomains"]:
+      for user in domain["users"]["users"]:
+        users.append({
+          "domainId": domain["id"],
+          "userId": user["id"],
+          "userName": user["name"],
+          "userEmail": user["email"],
+          "userType": user["type"]["id"],
+        })
 
     # Continue to parse till all the data is fetched
-    nextCursor = result["data"]["actor"]["users"]["userSearch"]["nextCursor"]
+    nextCursor = result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["nextCursor"]
     if nextCursor == None:
       print("All users are fetched.")
       break
     else:
       print("Users are not fetched entirely. Continuing...")
 
-  return allUsers
+  return users
