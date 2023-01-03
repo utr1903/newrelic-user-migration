@@ -1,17 +1,17 @@
 #!/bin/bash
 
 # Source account info
-srcAccountId=""
-srcApiKey=""
-srcRegion=""
+srcAccountId=$NEWRELIC_ACCOUNT_ID
+srcApiKey=$NEWRELIC_API_KEY
+srcRegion=$NEWRELIC_REGION
 
 # Target account info
-tgtAccountId=""
-tgtApiKey=""
-tgtRegion=""
+tgtAccountId="x"
+tgtApiKey="x"
+tgtRegion="eu"
 
 # Run
-python3 main.py \
+python3 01_migrate_users.py \
   --srcAccountId $srcAccountId \
   --srcApiKey $srcApiKey \
   --srcRegion $srcRegion \
