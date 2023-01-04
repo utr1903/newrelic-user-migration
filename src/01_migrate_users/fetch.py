@@ -11,28 +11,25 @@ def createQuery(cursors):
     actor {
       organization {
         userManagement {
-          authenticationDomains(
-            cursor: $cursorDomains
-          ) {
+          authenticationDomains(cursor: $cursorDomains) {
             nextCursor
             authenticationDomains {
               id
               name
-              groups(
-                cursor: $cursorGroups
-              ) {
+              users(cursor: $cursorUsers) {
                 nextCursor
-                groups {
+                users {
                   id
-                  displayName
-                  users(
-                    cursor: $cursorUsers
-                  ) {
+                  name
+                  email
+                  type {
+                    id
+                  }
+                  groups(cursor: $cursorGroups) {
                     nextCursor
-                    users {
-                      email
+                    groups {
                       id
-                      name
+                      displayName
                     }
                   }
                 }
@@ -48,8 +45,8 @@ def createQuery(cursors):
   # Substitute variables
   query = queryTemplate.substitute(
     cursorDomains = "null" if cursors["domains"] == None else cursors["domains"],
-    cursorGroups = "null" if cursors["groups"] == None else cursors["groups"],
     cursorUsers = "null" if cursors["users"] == None else cursors["users"],
+    cursorGroups = "null" if cursors["groups"] == None else cursors["groups"],
   )
 
   return query
@@ -99,7 +96,7 @@ def executeRequest(cfg, cursors):
 
 def saveDomain(domains, domain):
   logging.info(json.dumps({
-    "message": "Looping over the groups of the domain.",
+    "message": "Saving domain information.",
     "domainId": domain["id"],
     "domainName": domain["name"],
   }))
@@ -107,34 +104,35 @@ def saveDomain(domains, domain):
   # Create domain
   domains[domain["id"]] = {
     "name": domain["name"],
-    "groups": {},
-  }
-
-def saveGroup(domains, domain, group):
-  logging.info(json.dumps({
-    "message": "Looping over the users of the group.",
-    "domainId": domain["id"],
-    "groupId": group["id"],
-  }))
-
-  # Create group
-  domains[domain["id"]]["groups"][group["id"]] = {
-    "name": group["displayName"],
     "users": {},
   }
 
-def saveUser(domains, domain, group, user):
+def saveUser(domains, domain, user):
   logging.info(json.dumps({
     "message": "Saving user information.",
     "domainId": domain["id"],
-    "groupId": group["id"],
     "userId": user["id"],
   }))
 
   # Create users
-  domains[domain["id"]]["groups"][group["id"]]["users"][user["id"]] = {
+  domains[domain["id"]]["users"][user["id"]] = {
     "name": user["name"],
     "email": user["email"],
+    "type": user["type"]["id"],
+    "groups": {},
+  }
+
+def saveGroup(domains, domain, user, group):
+  logging.info(json.dumps({
+    "message": "Saving group information.",
+    "domainId": domain["id"],
+    "groupId": user["id"],
+  }))
+
+  # Create group
+  domains[domain["id"]]["users"][user["id"]]["groups"][group["id"]] = {
+    "id": group["id"],
+    "name": group["displayName"],
   }
 
 def isStillFetchingUsers(cursorUsers, domainId, groupId):
@@ -192,8 +190,8 @@ def run(cfg):
   domains = {}
   cursors = {
     "domains": None,
-    "groups": None,
     "users": None,
+    "groups": None,
   }
 
   # Fetch all domains
@@ -206,22 +204,22 @@ def run(cfg):
     for domain in result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["authenticationDomains"]:
       saveDomain(domains, domain)
 
-      # Save groups
-      for group in domain["groups"]["groups"]:
-        saveGroup(domains, domain, group)
+      # Save users
+      for user in domain["users"]["users"]:
+        saveUser(domains, domain, user)
 
-        # Save users
-        for user in group["users"]["users"]:
-          saveUser(domains, domain, group, user)
-
-    # Check if all users in the group are fetched
-    cursors["users"] = group["users"]["nextCursor"]
-    if isStillFetchingUsers(cursors["users"], domain["id"], group["id"]):
-      continue
+        # Save groups
+        for group in user["groups"]["groups"]:
+          saveGroup(domains, domain, user, group)
 
     # Check if all groups in the domain are fetched
-    cursors["groups"] = domain["groups"]["nextCursor"]
+    cursors["groups"] = user["groups"]["nextCursor"]
     if isStillFetchingGroups(cursors["groups"], domain["id"]):
+      continue
+
+    # Check if all users in the group are fetched
+    cursors["users"] = domain["users"]["nextCursor"]
+    if isStillFetchingUsers(cursors["users"], domain["id"], group["id"]):
       continue
 
     # Check if all domains are fetched
