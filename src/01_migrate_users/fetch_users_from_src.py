@@ -20,6 +20,7 @@ def run(args):
           userManagement {
             authenticationDomains {
               authenticationDomains {
+                id
                 users(
                   cursor: $nextCursor
                 ) {
@@ -58,6 +59,9 @@ def run(args):
       return
 
     result = request.json()
+    if "errors" in result:
+      print("Query has returned error(s): {}.".format(result["errors"]))
+      return
 
     for domain in result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["authenticationDomains"]:
       for user in domain["users"]["users"]:
