@@ -1,8 +1,7 @@
 import cmd_args
 from config import Config
-import fetch_users
-import create_users
-
+import fetch
+import create
 
 def main():
 
@@ -13,11 +12,11 @@ def main():
   cfg = Config(args)
   cfg.parse()
 
-  # Fetch users from the source account
-  oldUsers = fetch_users.run(cfg)
+  # Fetch domains
+  domains = fetch.run(cfg)
 
   # Create new users in the target account
-  newUsers = create_users.run(cfg, oldUsers)
+  # newUsers = create_users.run(cfg, oldUsers)
 
 if __name__ == '__main__':
   main()
