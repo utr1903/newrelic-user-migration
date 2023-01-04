@@ -1,4 +1,6 @@
 import logging
+import os
+import time
 import json
 import argparse
 
@@ -10,6 +12,9 @@ def run():
 
   # Configure logger
   logging.basicConfig(level=logging.DEBUG)
+  if not os.path.exists("{}/logs".format(os.getcwd())):
+    os.makedirs("{}/logs".format(os.getcwd()))
+  logging.getLogger().addHandler(logging.FileHandler("{0}/{1}.log".format("logs", int(time.time()))))
 
   logging.debug(json.dumps({
     "message": "Parsing command line arguments.",
