@@ -1,20 +1,5 @@
 #!/bin/bash
 
-# Source account info
-srcAccountId=$NEWRELIC_ACCOUNT_ID
-srcApiKey=$NEWRELIC_API_KEY
-srcRegion=$NEWRELIC_REGION
-
-# Target account info
-tgtAccountId="x"
-tgtApiKey="x"
-tgtRegion="eu"
-
-# Run
 python3 main.py \
-  --srcAccountId $srcAccountId \
-  --srcApiKey $srcApiKey \
-  --srcRegion $srcRegion \
-  --tgtAccountId $tgtAccountId \
-  --tgtApiKey $tgtApiKey \
-  --tgtRegion $tgtRegion
+  --configPath "config.json" \
+  --dryRun "false"

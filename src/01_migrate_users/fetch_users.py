@@ -1,16 +1,21 @@
+import logging
+import json
 import requests
 from string import Template
 
-import parse_args
+def run(cfg):
 
-def run(args):
   headers = {
-    "Api-Key": args[parse_args.SOURCE_API_KEY],
+    "Api-Key": cfg.SOURCE_API_KEY,
     "Content-Type": "application/json"
   }
 
   users = []
   nextCursor = None
+
+  logging.debug(json.dumps({
+    "message": "Fetching all users from the source account.",
+  }))
 
   while True:
     queryTemplate = Template("""
@@ -48,23 +53,47 @@ def run(args):
     )
 
     # Execute request
+    logging.debug(json.dumps({
+      "message": "Making request to New Relic.",
+    }))
     request = requests.post(
-      "https://api.eu.newrelic.com/graphql" if args[parse_args.SOURCE_REGION] == "eu" else "https://api.newrelic.com/graphql",
+      "https://api.eu.newrelic.com/graphql" if cfg.SOURCE_REGION == "eu" else "https://api.newrelic.com/graphql",
       json={"query": query},
       headers=headers
     )
 
     if request.status_code != 200:
-      print("Query failed to run by returning code of {}. {}".format(request.status_code, query))
-      return
+      msg = "Request has failed."
+      logging.error(json.dumps({
+        "message": "Request has succeeded to New Relic.",
+        "statusCode": request.status_code,
+      }))
+      raise Exception(msg)
 
     result = request.json()
     if "errors" in result:
-      print("Query has returned error(s): {}.".format(result["errors"]))
-      return
+      msg = "Request has returned an error."
+      logging.error(json.dumps({
+        "message": "Request has succeeded to New Relic.",
+        "error": json.dumps(result["errors"]),
+      }))
+      raise Exception(msg)
+
+    logging.debug(json.dumps({
+      "message": "Request has succeeded to New Relic.",
+    }))
 
     for domain in result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["authenticationDomains"]:
       for user in domain["users"]["users"]:
+        logging.info(json.dumps({
+          "message": "Saving user information.",
+          "domainId": domain["id"],
+          "userId": user["id"],
+          "userName": user["name"],
+          "userEmail": user["email"],
+          "userType": user["type"]["id"],
+        }))
+
         users.append({
           "domainId": domain["id"],
           "userId": user["id"],
@@ -76,9 +105,13 @@ def run(args):
     # Continue to parse till all the data is fetched
     nextCursor = result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["nextCursor"]
     if nextCursor == None:
-      print("All users are fetched.")
+      logging.debug(json.dumps({
+        "message": "All users are fetched successfully.",
+      }))
       break
     else:
-      print("Users are not fetched entirely. Continuing...")
+      logging.debug(json.dumps({
+        "message": "Users are not fetched entirely, continuing.",
+      }))
 
   return users
