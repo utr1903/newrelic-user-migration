@@ -97,6 +97,46 @@ def executeRequest(cfg, cursors):
 
   return result
 
+def saveDomain(domains, domain):
+  logging.info(json.dumps({
+    "message": "Looping over the groups of the domain.",
+    "domainId": domain["id"],
+    "domainName": domain["name"],
+  }))
+
+  # Create domain
+  domains[domain["id"]] = {
+    "name": domain["name"],
+    "groups": {},
+  }
+
+def saveGroup(domains, domain, group):
+  logging.info(json.dumps({
+    "message": "Looping over the users of the group.",
+    "domainId": domain["id"],
+    "groupId": group["id"],
+  }))
+
+  # Create group
+  domains[domain["id"]]["groups"][group["id"]] = {
+    "name": group["displayName"],
+    "users": {},
+  }
+
+def saveUser(domains, domain, group, user):
+  logging.info(json.dumps({
+    "message": "Saving user information.",
+    "domainId": domain["id"],
+    "groupId": group["id"],
+    "userId": user["id"],
+  }))
+
+  # Create users
+  domains[domain["id"]]["groups"][group["id"]]["users"][user["id"]] = {
+    "name": user["name"],
+    "email": user["email"],
+  }
+
 def isStillFetchingUsers(cursorUsers, domainId, groupId):
   if cursorUsers == None:
     logging.debug(json.dumps({
@@ -144,16 +184,17 @@ def isStillFetchingDomains(cursorDomains):
 
 def run(cfg):
 
+  logging.debug(json.dumps({
+    "message": "Fetching all users from the source account.",
+  }))
+
+  # Init variables
   domains = {}
   cursors = {
     "domains": None,
     "groups": None,
     "users": None,
   }
-
-  logging.debug(json.dumps({
-    "message": "Fetching all users from the source account.",
-  }))
 
   # Fetch all domains
   while True:
@@ -163,46 +204,15 @@ def run(cfg):
 
     # Save domains
     for domain in result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["authenticationDomains"]:
-      logging.info(json.dumps({
-        "message": "Looping over the groups of the domain.",
-        "domainId": domain["id"],
-        "domainName": domain["name"],
-      }))
-
-      # Create domain
-      domains[domain["id"]] = {
-        "name": domain["name"],
-        "groups": {},
-      }
+      saveDomain(domains, domain)
 
       # Save groups
       for group in domain["groups"]["groups"]:
-        logging.info(json.dumps({
-          "message": "Looping over the users of the group.",
-          "domainId": domain["id"],
-          "groupId": group["id"],
-        }))
-
-        # Create group
-        domains[domain["id"]]["groups"][group["id"]] = {
-          "name": group["displayName"],
-          "users": {},
-        }
+        saveGroup(domains, domain, group)
 
         # Save users
         for user in group["users"]["users"]:
-          logging.info(json.dumps({
-            "message": "Saving user information.",
-            "domainId": domain["id"],
-            "groupId": group["id"],
-            "userId": user["id"],
-          }))
-
-          # Create users
-          domains[domain["id"]]["groups"][group["id"]]["users"][user["id"]] = {
-            "name": user["name"],
-            "email": user["email"],
-          }
+          saveUser(domains, domain, group, user)
 
     # Check if all users in the group are fetched
     cursors["users"] = group["users"]["nextCursor"]
@@ -211,7 +221,7 @@ def run(cfg):
 
     # Check if all groups in the domain are fetched
     cursors["groups"] = domain["groups"]["nextCursor"]
-    if isStillFetchingGroups(cursors["users"], domain["id"]):
+    if isStillFetchingGroups(cursors["groups"], domain["id"]):
       continue
 
     # Check if all domains are fetched
@@ -219,5 +229,4 @@ def run(cfg):
     if not isStillFetchingDomains(cursors["domains"]):
       break
 
-  logging.info(json.dumps(domains))
   return domains
