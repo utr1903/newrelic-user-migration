@@ -5,27 +5,31 @@ import json
 import argparse
 
 # Argument names
+LOG_LEVEL = "logLevel"
 CONFIG_PATH = "configPath"
 DRY_RUN = "dryRun"
 
 def run():
+  parser = argparse.ArgumentParser()
+
+  parser.add_argument("--{}".format(LOG_LEVEL), help="Log level: [debug, info, error].")
+  parser.add_argument("--{}".format(CONFIG_PATH), help="Path to the configuration file.")
+  parser.add_argument("--{}".format(DRY_RUN), help="To see what will be done: [true, false].")
+
+  args = vars(parser.parse_args())
 
   # Configure logger
-  logging.basicConfig(level=logging.DEBUG)
+  logLevel = args[LOG_LEVEL]
+  if logLevel == "debug":
+    logging.basicConfig(level=logging.DEBUG)
+  elif logLevel == "info":
+    logging.basicConfig(level=logging.INFO)
+  else:
+    logging.basicConfig(level=logging.ERROR)
+  
   if not os.path.exists("{}/logs".format(os.getcwd())):
     os.makedirs("{}/logs".format(os.getcwd()))
   logging.getLogger().addHandler(logging.FileHandler("{0}/{1}.log".format("logs", int(time.time()))))
-
-  logging.debug(json.dumps({
-    "message": "Parsing command line arguments.",
-  }))
-
-  parser = argparse.ArgumentParser()
-
-  parser.add_argument("--{}".format(CONFIG_PATH), help="Path to the configuration file.")
-  parser.add_argument("--{}".format(DRY_RUN), help="To see what will be done.")
-
-  args = vars(parser.parse_args())
 
   # Source account ID
   configPath = args[CONFIG_PATH]

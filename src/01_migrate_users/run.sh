@@ -1,5 +1,6 @@
 #!/bin/bash
 
 python3 main.py \
+  --logLevel "info" \
   --configPath "config.json" \
-  --dryRun "false"
+  --dryRun "true"
