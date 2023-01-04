@@ -3,7 +3,6 @@ from config import Config
 import fetch_users
 import create_users
 
-import json
 
 def main():
 

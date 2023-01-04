@@ -51,7 +51,7 @@ def run(cfg, users):
 
     # If dry run, just log
     if cfg.ARGS[cmd_args.DRY_RUN] == True:
-      logging.debug(json.dumps({
+      logging.info(json.dumps({
         "message": "Dry run: To be created user info.",
         "domainId": getNewAuthDomain(cfg, user),
         "userId": user["userId"],
