@@ -27,6 +27,37 @@ def convertUserType(userType):
     }))
     raise Exception(msg)
 
+
+def createQueryToFindUser(userEmail):
+
+  # Create template
+  queryTemplate = Template("""
+  {
+    actor {
+      users {
+        userSearch(
+          query: {
+            scope: {
+              email: "$userEmail"
+            }
+          }
+        ) {
+          users {
+            userId
+          }
+        }
+      }
+    }
+  }
+  """)
+
+  # Substitute variables
+  query = queryTemplate.substitute(
+    userEmail = userEmail,
+  )
+
+  return query
+
 def createQueryToCreateUser(domainId, userName, userEmail, userType):
 
   # Create template
@@ -140,6 +171,20 @@ def saveDomain(tgtDomains, tgtDomainId):
     "users": {},
   }
 
+def findUser(cfg, tgtUserEmail):
+
+  # Create query
+  query = createQueryToFindUser(tgtUserEmail)
+
+  # Execute request
+  result = executeRequest(cfg, query)
+
+  users = result["data"]["actor"]["users"]["userSearch"]["users"]
+  if len(users) == 0:
+    return None
+  else:
+    return users[0]["userId"]
+
 def saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser):
   # Initialize properties
   tgtUserId = "*{}*".format(srcUserId)
@@ -220,7 +265,13 @@ def run(cfg, srcDomains):
 
     # Save users
     for srcUserId, srcUser in srcDomain["users"].items():
-      tgtUserId = saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser)
+
+      # Check if user already exists
+      tgtUserId = findUser(cfg, srcUser["email"])
+
+      # If not, create a new one
+      if tgtUserId == None:
+        tgtUserId = saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser)
 
       return
       # Save groups & assign users
