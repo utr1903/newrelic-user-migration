@@ -13,13 +13,13 @@ def main():
   cfg = Config(args)
   cfg.parse()
 
-  # Fetch src domains
+  # Fetch users in src domains
   srcDomains = fetch.run(cfg)
   write.run(srcDomains, "src")
 
   # Create users in tgt domains
-  # tgtDomains = create.run(cfg, srcDomains)
-  # write.run(tgtDomains, "src")
+  tgtDomains = create.run(cfg, srcDomains)
+  write.run(tgtDomains, "tgt")
 
 if __name__ == '__main__':
   main()
