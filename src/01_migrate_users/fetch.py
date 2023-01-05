@@ -126,14 +126,12 @@ def saveGroup(domains, domain, user, group):
   logging.info(json.dumps({
     "message": "Saving group information.",
     "domainId": domain["id"],
-    "groupId": user["id"],
+    "userId": user["id"],
+    "groupId": group["id"],
   }))
 
   # Create group
-  domains[domain["id"]]["users"][user["id"]]["groups"][group["id"]] = {
-    "id": group["id"],
-    "name": group["displayName"],
-  }
+  domains[domain["id"]]["users"][user["id"]]["groups"][group["id"]] = group["displayName"]
 
 def isStillFetchingUsers(cursorUsers, domainId, groupId):
   if cursorUsers == None:
