@@ -157,6 +157,11 @@ def createQueryToFetchUsers(domainId, cursorUsers):
                 users {
                   id
                   email
+                  groups {
+                    groups {
+                      displayName
+                    }
+                  }
                 }
               }
             }
@@ -193,7 +198,7 @@ def areAllUsersFetched(cursorUsers, domainId):
 def fetchUsersOfDomain(cfg, tgtDomainId):
 
   # Initialize variables
-  userEmailsToIds = {}
+  userMapping = {}
   cursorUsers = None
 
   # Continue until all users are fetched
@@ -213,13 +218,22 @@ def fetchUsersOfDomain(cfg, tgtDomainId):
         "userId": user["id"],
         "userEmail": user["email"],
       }))
-      userEmailsToIds[user["email"]] = user["id"]
+
+      userGroups = []
+      for groupName in user["groups"]["groups"]:
+        userGroups.append(groupName["displayName"])
+
+      userMapping[user["email"]] = {
+        "id": user["id"],
+        "groupNames": userGroups,
+      }
 
     cursorUsers = result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["authenticationDomains"][0]["users"]["nextCursor"]
     if areAllUsersFetched(cursorUsers, tgtDomainId):
       break
 
-  return userEmailsToIds
+  logging.debug(json.dumps(userMapping))
+  return userMapping
 
 def createQueryToFetchGroups(domainId, cursorGroups):
 
@@ -276,7 +290,7 @@ def areAllGroupsFetched(cursorGroups, domainId):
 def fetchGroupsOfDomain(cfg, tgtDomainId):
 
   # Initialize variables
-  groupNamesToIds = {}
+  groupMapping = {}
   cursorGroups = None
 
   # Continue until all groups are fetched
@@ -296,13 +310,13 @@ def fetchGroupsOfDomain(cfg, tgtDomainId):
         "groupId": group["id"],
         "groupName": group["displayName"],
       }))
-      groupNamesToIds[group["displayName"]] = group["id"]
+      groupMapping[group["displayName"]] = group["id"]
 
     cursorGroups = result["data"]["actor"]["organization"]["authorizationManagement"]["authenticationDomains"]["authenticationDomains"][0]["groups"]["nextCursor"]
     if areAllGroupsFetched(cursorGroups, tgtDomainId):
       break
 
-  return groupNamesToIds
+  return groupMapping
 
 def saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser):
   # Initialize properties
@@ -383,20 +397,33 @@ def run(cfg, srcDomains):
     saveDomain(tgtDomains, tgtDomainId)
 
     # Fetch all users of the target domain
-    userEmailsToIds = fetchUsersOfDomain(cfg, tgtDomainId)
+    userMapping = fetchUsersOfDomain(cfg, tgtDomainId)
 
     # Fetch all groups of the target domain
-    groupNamesToIds = fetchGroupsOfDomain(cfg, tgtDomainId)
+    groupMapping = fetchGroupsOfDomain(cfg, tgtDomainId)
 
     # Save users
     for srcUserId, srcUser in srcDomain["users"].items():
 
+      tgtUserId = ""
+
       # Create new user if not exists
-      if srcUser["email"] not in userEmailsToIds:
+      if srcUser["email"] not in userMapping:
         tgtUserId = saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser)
+      # Get the user ID from existing set
+      else:
+        tgtUserId = userMapping[srcUser["email"]]["id"]
 
       # Save groups & assign users
       for srcGroupId, srcGroupName in srcUser["groups"].items():
-        tgtGroupId = saveGroup(cfg, tgtDomains, tgtDomainId, tgtUserId, srcGroupId, srcGroupName)
+
+        tgtGroupId = ""
+
+        # Create new group if not exists
+        if srcGroupName not in groupMapping:
+          tgtGroupId = saveGroup(cfg, tgtDomains, tgtDomainId, tgtUserId, srcGroupId, srcGroupName)
+        # Get the user ID from existing set
+        else:
+          tgtGroupId = groupMapping[srcGroupName]
 
   return tgtDomains
