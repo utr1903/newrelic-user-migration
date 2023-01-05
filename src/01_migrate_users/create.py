@@ -27,37 +27,6 @@ def convertUserType(userType):
     }))
     raise Exception(msg)
 
-
-def createQueryToFindUser(userEmail):
-
-  # Create template
-  queryTemplate = Template("""
-  {
-    actor {
-      users {
-        userSearch(
-          query: {
-            scope: {
-              email: "$userEmail"
-            }
-          }
-        ) {
-          users {
-            userId
-          }
-        }
-      }
-    }
-  }
-  """)
-
-  # Substitute variables
-  query = queryTemplate.substitute(
-    userEmail = userEmail,
-  )
-
-  return query
-
 def createQueryToCreateUser(domainId, userName, userEmail, userType):
 
   # Create template
@@ -171,19 +140,169 @@ def saveDomain(tgtDomains, tgtDomainId):
     "users": {},
   }
 
-def findUser(cfg, tgtUserEmail):
+def createQueryToFetchUsers(domainId, cursorUsers):
 
-  # Create query
-  query = createQueryToFindUser(tgtUserEmail)
+  # Create template
+  queryTemplate = Template("""
+  {
+    actor {
+      organization {
+        userManagement {
+          authenticationDomains(
+            id: "$domainId"
+          ) {
+            authenticationDomains {
+              users(cursor: $cursorUsers) {
+                nextCursor
+                users {
+                  id
+                  email
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  """)
 
-  # Execute request
-  result = executeRequest(cfg, query)
+  # Substitute variables
+  query = queryTemplate.substitute(
+    domainId = domainId,
+    cursorUsers = "null" if cursorUsers == None else cursorUsers,
+  )
 
-  users = result["data"]["actor"]["users"]["userSearch"]["users"]
-  if len(users) == 0:
-    return None
+  return query
+
+def areAllUsersFetched(cursorUsers, domainId):
+  if cursorUsers == None:
+    logging.debug(json.dumps({
+      "message": "All users are fetched successfully.",
+      "domainId": domainId,
+    }))
+    return True
   else:
-    return users[0]["userId"]
+    logging.debug(json.dumps({
+      "message": "Users are not fetched entirely, continuing.",
+      "domainId": domainId,
+      "cursorUsers": cursorUsers,
+    }))
+    return False
+
+def fetchUsersOfDomain(cfg, tgtDomainId):
+
+  # Initialize variables
+  userEmailsToIds = {}
+  cursorUsers = None
+
+  # Continue until all users are fetched
+  while True:
+
+    # Create query
+    query = createQueryToFetchUsers(tgtDomainId, cursorUsers)
+
+    # Execute request
+    result = executeRequest(cfg, query)
+
+    users = result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["authenticationDomains"][0]["users"]["users"]
+    for user in users:
+      logging.debug(json.dumps({
+        "message": "Fetched user email to ID.",
+        "domainId": tgtDomainId,
+        "userId": user["id"],
+        "userEmail": user["email"],
+      }))
+      userEmailsToIds[user["email"]] = user["id"]
+
+    cursorUsers = result["data"]["actor"]["organization"]["userManagement"]["authenticationDomains"]["authenticationDomains"][0]["users"]["nextCursor"]
+    if areAllUsersFetched(cursorUsers, tgtDomainId):
+      break
+
+  return userEmailsToIds
+
+def createQueryToFetchGroups(domainId, cursorGroups):
+
+  # Create template
+  queryTemplate = Template("""
+  {
+    actor {
+      organization {
+        authorizationManagement {
+          authenticationDomains(
+            id: "$domainId"
+          ) {
+            authenticationDomains {
+              groups(
+                cursor: $cursorGroups
+              ) {
+                nextCursor
+                groups {
+                  id
+                  displayName
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  """)
+
+  # Substitute variables
+  query = queryTemplate.substitute(
+    domainId = domainId,
+    cursorGroups = "null" if cursorGroups == None else cursorGroups,
+  )
+
+  return query
+
+def areAllGroupsFetched(cursorGroups, domainId):
+  if cursorGroups == None:
+    logging.debug(json.dumps({
+      "message": "All groups are fetched successfully.",
+      "domainId": domainId,
+    }))
+    return True
+  else:
+    logging.debug(json.dumps({
+      "message": "Groups are not fetched entirely, continuing.",
+      "domainId": domainId,
+      "cursorGroups": cursorGroups,
+    }))
+    return False
+
+def fetchGroupsOfDomain(cfg, tgtDomainId):
+
+  # Initialize variables
+  groupNamesToIds = {}
+  cursorGroups = None
+
+  # Continue until all groups are fetched
+  while True:
+
+    # Create query
+    query = createQueryToFetchGroups(tgtDomainId, cursorGroups)
+
+    # Execute request
+    result = executeRequest(cfg, query)
+
+    groups = result["data"]["actor"]["organization"]["authorizationManagement"]["authenticationDomains"]["authenticationDomains"][0]["groups"]["groups"]
+    for group in groups:
+      logging.debug(json.dumps({
+        "message": "Fetched group name to ID.",
+        "domainId": tgtDomainId,
+        "groupId": group["id"],
+        "groupName": group["displayName"],
+      }))
+      groupNamesToIds[group["displayName"]] = group["id"]
+
+    cursorGroups = result["data"]["actor"]["organization"]["authorizationManagement"]["authenticationDomains"]["authenticationDomains"][0]["groups"]["nextCursor"]
+    if areAllGroupsFetched(cursorGroups, tgtDomainId):
+      break
+
+  return groupNamesToIds
 
 def saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser):
   # Initialize properties
@@ -263,17 +382,19 @@ def run(cfg, srcDomains):
     tgtDomainId = getTgtAuthDomainId(cfg, srcDomainId)
     saveDomain(tgtDomains, tgtDomainId)
 
+    # Fetch all users of the target domain
+    userEmailsToIds = fetchUsersOfDomain(cfg, tgtDomainId)
+
+    # Fetch all groups of the target domain
+    groupNamesToIds = fetchGroupsOfDomain(cfg, tgtDomainId)
+
     # Save users
     for srcUserId, srcUser in srcDomain["users"].items():
 
-      # Check if user already exists
-      tgtUserId = findUser(cfg, srcUser["email"])
-
-      # If not, create a new one
-      if tgtUserId == None:
+      # Create new user if not exists
+      if srcUser["email"] not in userEmailsToIds:
         tgtUserId = saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser)
 
-      return
       # Save groups & assign users
       for srcGroupId, srcGroupName in srcUser["groups"].items():
         tgtGroupId = saveGroup(cfg, tgtDomains, tgtDomainId, tgtUserId, srcGroupId, srcGroupName)
