@@ -2,6 +2,7 @@ import logging
 import json
 import requests
 from string import Template
+import uuid
 
 import cmd_args
 
@@ -232,7 +233,6 @@ def fetchUsersOfDomain(cfg, tgtDomainId):
     if areAllUsersFetched(cursorUsers, tgtDomainId):
       break
 
-  logging.debug(json.dumps(userMapping))
   return userMapping
 
 def createQueryToFetchGroups(domainId, cursorGroups):
@@ -318,12 +318,7 @@ def fetchGroupsOfDomain(cfg, tgtDomainId):
 
   return groupMapping
 
-def saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser):
-  # Initialize properties
-  tgtUserId = "*{}*".format(srcUserId)
-  tgtUserName = srcUser["name"]
-  tgtUserEmail = srcUser["email"]
-  tgtUserType = srcUser["type"]
+def createUser(cfg, tgtDomainId, tgtUserName, tgtUserEmail, tgtUserType):
 
   # Perform if not dry run
   if cfg.ARGS[cmd_args.DRY_RUN] == False:
@@ -334,9 +329,13 @@ def saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser):
     # Execute request
     result = executeRequest(cfg, query)
 
-    # Update properties
-    tgtUserId = result["data"]["userManagementCreateUser"]["createdUser"]["id"]
-    tgtUserType = result["data"]["userManagementCreateUser"]["createdUser"]["type"]["id"]
+    return result["data"]["userManagementCreateUser"]["createdUser"]["id"]
+
+def saveUser(tgtDomains, tgtDomainId, tgtUserId, tgtUserName, tgtUserEmail, tgtUserType):
+
+  # Assign a random ID in case of dry run
+  if tgtUserId == None:
+    tgtUserId = uuid.uuid4()
 
   logging.info(json.dumps({
     "message": "Saving user information.",
@@ -352,11 +351,14 @@ def saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser):
     "groups": {},
   }
 
-  return tgtUserId
+def logUserExists(tgtDomainId, tgtUserId):
+  logging.info(json.dumps({
+    "message": "User already exists.",
+    "domainId": tgtDomainId,
+    "userId": tgtUserId,
+  }))
 
-def saveGroup(cfg, tgtDomains, tgtDomainId, tgtUserId, srcGroupId, tgtGroupName):
-  # Initialize properties
-  tgtGroupId = "*{}*".format(srcGroupId)
+def createGroup(cfg, tgtDomainId, tgtGroupName):
 
   # Perform if not dry run
   if cfg.ARGS[cmd_args.DRY_RUN] == False:
@@ -367,20 +369,30 @@ def saveGroup(cfg, tgtDomains, tgtDomainId, tgtUserId, srcGroupId, tgtGroupName)
     # Execute request
     result = executeRequest(cfg, query)
 
-    # Update properties
-    tgtGroupId = result["data"]["userManagementCreateUser"]["createdUser"]["id"]
+    return result["data"]["userManagementCreateUser"]["createdUser"]["id"]
+
+def saveGroup(tgtDomains, tgtDomainId, tgtUserId, tgtGroupName, tgtGroupId):
+
+  # Assign a random ID in case of dry run
+  if tgtUserId == None:
+    tgtUserId = uuid.uuid4()
 
   logging.info(json.dumps({
-    "message": "Saving user information.",
+    "message": "Saving group information.",
     "domainId": tgtDomainId,
     "userId": tgtUserId,
-    "userId": tgtGroupId,
+    "groupId": tgtGroupId,
   }))
 
-  # Create users
-  tgtDomains[tgtDomainId]["users"][tgtUserId]["groups"][tgtGroupId] = tgtGroupName
+  # Create groups
+  tgtDomains[tgtDomainId]["users"][tgtUserId]["groups"][tgtGroupName] = tgtGroupId
 
-  return tgtGroupId
+def logGroupExists(tgtDomainId, tgtGroupId):
+  logging.info(json.dumps({
+    "message": "Group already exists.",
+    "domainId": tgtDomainId,
+    "groupId": tgtGroupId,
+  }))
 
 def run(cfg, srcDomains):
 
@@ -405,25 +417,33 @@ def run(cfg, srcDomains):
     # Save users
     for srcUserId, srcUser in srcDomain["users"].items():
 
-      tgtUserId = ""
+      # Initialize target user ID
+      tgtUserId = None
 
       # Create new user if not exists
       if srcUser["email"] not in userMapping:
-        tgtUserId = saveUser(cfg, tgtDomains, tgtDomainId, srcUserId, srcUser)
-      # Get the user ID from existing set
+        tgtUserId = createUser(cfg, tgtDomainId, srcUser["name"], srcUser["email"], srcUser["type"])
+        saveUser(tgtDomains, tgtDomainId, tgtUserId, srcUser["name"], srcUser["email"], srcUser["type"])
+
+      # Get the existing user ID
       else:
         tgtUserId = userMapping[srcUser["email"]]["id"]
+        logUserExists(tgtDomainId, tgtUserId)
 
       # Save groups & assign users
       for srcGroupId, srcGroupName in srcUser["groups"].items():
 
-        tgtGroupId = ""
+        # Initialize target group ID
+        tgtGroupId = None
 
         # Create new group if not exists
         if srcGroupName not in groupMapping:
-          tgtGroupId = saveGroup(cfg, tgtDomains, tgtDomainId, tgtUserId, srcGroupId, srcGroupName)
-        # Get the user ID from existing set
+          tgtGroupId = createGroup(cfg, tgtDomainId, srcGroupName)
+          saveGroup(tgtDomains, tgtDomainId, tgtUserId, srcGroupName, tgtGroupId)
+
+        # Get the existing group ID
         else:
           tgtGroupId = groupMapping[srcGroupName]
+          logGroupExists(tgtDomainId, tgtUserId)
 
   return tgtDomains
