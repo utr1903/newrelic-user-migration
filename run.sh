@@ -1,6 +1,6 @@
 #!/bin/bash
 
-python3 main.py \
+python3 src/main.py \
   --logLevel "debug" \
   --configPath "config.json" \
   --dryRun "true"
