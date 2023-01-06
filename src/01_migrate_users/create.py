@@ -330,12 +330,14 @@ def createUser(cfg, tgtDomainId, tgtUserName, tgtUserEmail, tgtUserType):
     result = executeRequest(cfg, query)
 
     return result["data"]["userManagementCreateUser"]["createdUser"]["id"]
+  else:
+    return str(uuid.uuid4())
 
 def saveUser(tgtDomains, tgtDomainId, tgtUserId, tgtUserName, tgtUserEmail, tgtUserType):
 
   # Assign a random ID in case of dry run
   if tgtUserId == None:
-    tgtUserId = uuid.uuid4()
+    tgtUserId = str(uuid.uuid4())
 
   logging.info(json.dumps({
     "message": "Saving user information.",
@@ -370,6 +372,8 @@ def createGroup(cfg, tgtDomainId, tgtGroupName):
     result = executeRequest(cfg, query)
 
     return result["data"]["userManagementCreateUser"]["createdUser"]["id"]
+  else:
+    return str(uuid.uuid4())
 
 def saveGroup(tgtDomains, tgtDomainId, tgtUserId, tgtGroupName, tgtGroupId):
 
@@ -394,6 +398,57 @@ def logGroupExists(tgtDomainId, tgtGroupId):
     "groupId": tgtGroupId,
   }))
 
+def createQueryToAssignUserToGroup(userId, groupId):
+
+  # Create template
+  queryTemplate = Template("""
+  mutation {
+    userManagementAddUsersToGroups(
+      addUsersToGroupsOptions: {
+        groupIds: "$groupId",
+        userIds: "$userId"
+      }
+    ) {
+      groups {
+        id
+      }
+    }
+  }
+  """)
+
+  # Substitute variables
+  query = queryTemplate.substitute(
+    userId = userId,
+    groupId = groupId,
+  )
+
+  return query
+
+def assignUserToGroup(cfg, userId, groupId):
+
+  # Perform if not dry run
+  if cfg.ARGS[cmd_args.DRY_RUN] == False:
+
+    # Create query
+    query = createQueryToAssignUserToGroup(userId, groupId)
+
+    # Execute request
+    executeRequest(cfg, query)
+  
+  logging.info(json.dumps({
+    "message": "User is assigned to group.",
+    "userId": userId,
+    "groupId": groupId,
+  }))
+
+def logUserAlreadyAssignedToGroup(tgtDomainId, tgtUserId, tgtGroupId):
+  logging.info(json.dumps({
+    "message": "User is already assigned to group.",
+    "domainId": tgtDomainId,
+    "userId": tgtUserId,
+    "groupId": tgtGroupId,
+  }))
+
 def run(cfg, srcDomains):
 
   logging.debug(json.dumps({
@@ -415,7 +470,7 @@ def run(cfg, srcDomains):
     groupMapping = fetchGroupsOfDomain(cfg, tgtDomainId)
 
     # Save users
-    for srcUserId, srcUser in srcDomain["users"].items():
+    for srcUser in srcDomain["users"].values():
 
       # Initialize target user ID
       tgtUserId = None
@@ -424,6 +479,10 @@ def run(cfg, srcDomains):
       if srcUser["email"] not in userMapping:
         tgtUserId = createUser(cfg, tgtDomainId, srcUser["name"], srcUser["email"], srcUser["type"])
         saveUser(tgtDomains, tgtDomainId, tgtUserId, srcUser["name"], srcUser["email"], srcUser["type"])
+        userMapping[srcUser["email"]] = {
+          "id": tgtUserId,
+          "groupNames": [],
+        }
 
       # Get the existing user ID
       else:
@@ -431,7 +490,7 @@ def run(cfg, srcDomains):
         logUserExists(tgtDomainId, tgtUserId)
 
       # Save groups & assign users
-      for srcGroupId, srcGroupName in srcUser["groups"].items():
+      for srcGroupName in srcUser["groups"].values():
 
         # Initialize target group ID
         tgtGroupId = None
@@ -445,5 +504,11 @@ def run(cfg, srcDomains):
         else:
           tgtGroupId = groupMapping[srcGroupName]
           logGroupExists(tgtDomainId, tgtUserId)
+
+        # Assign user to group if not assigned already
+        if srcGroupName not in userMapping[srcUser["email"]]["groupNames"]:
+          assignUserToGroup(cfg, tgtUserId, tgtGroupId)
+        else:
+          logUserAlreadyAssignedToGroup(tgtDomainId, tgtUserId, tgtGroupId)
 
   return tgtDomains
