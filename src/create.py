@@ -343,6 +343,7 @@ def saveUser(tgtDomains, tgtDomainId, tgtUserId, tgtUserName, tgtUserEmail, tgtU
     "message": "Saving user information.",
     "domainId": tgtDomainId,
     "userId": tgtUserId,
+    "userEmail": tgtUserEmail,
   }))
 
   # Create users
@@ -371,7 +372,7 @@ def createGroup(cfg, tgtDomainId, tgtGroupName):
     # Execute request
     result = executeRequest(cfg, query)
 
-    return result["data"]["userManagementCreateUser"]["createdUser"]["id"]
+    return result["data"]["userManagementCreateGroup"]["group"]["id"]
   else:
     return str(uuid.uuid4())
 
@@ -386,6 +387,7 @@ def saveGroup(tgtDomains, tgtDomainId, tgtUserId, tgtGroupName, tgtGroupId):
     "domainId": tgtDomainId,
     "userId": tgtUserId,
     "groupId": tgtGroupId,
+    "groupName": tgtGroupName,
   }))
 
   # Create groups
@@ -487,6 +489,7 @@ def run(cfg, srcDomains):
       # Get the existing user ID
       else:
         tgtUserId = userMapping[srcUser["email"]]["id"]
+        saveUser(tgtDomains, tgtDomainId, tgtUserId, srcUser["name"], srcUser["email"], srcUser["type"])
         logUserExists(tgtDomainId, tgtUserId)
 
       # Save groups & assign users
